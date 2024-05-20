@@ -1,20 +1,18 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StructField, StringType, FloatType, LongType
+from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 
 # Create a Spark session
 spark = SparkSession.builder \
-    .appName("KafkaSparkConsumer") \
+    .appName("RedditDataConsumer") \
     .getOrCreate()
 
 # Define schema for incoming data
 schema = StructType([
-    StructField("time", StringType(), True),
-    StructField("open", FloatType(), True),
-    StructField("high", FloatType(), True),
-    StructField("low", FloatType(), True),
-    StructField("close", FloatType(), True),
-    StructField("volume", LongType(), True)
+    StructField("Title", StringType(), True),
+    StructField("comments", ArrayType(StructType([
+        StructField("Body", StringType(), True)
+    ])), True)
 ])
 
 # Read data from Kafka
@@ -22,7 +20,7 @@ df = spark \
     .readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "localhost:9092") \
-    .option("subscribe", "alpaca-data") \
+    .option("subscribe", "reddit-data") \
     .option("startingOffsets", "earliest") \
     .load()
 
