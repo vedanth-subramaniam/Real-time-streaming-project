@@ -2,3 +2,4 @@ pyspark
 kafka-python
 six
 requests
+websocket
