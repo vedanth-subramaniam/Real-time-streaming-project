@@ -1,19 +1,17 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StructField, StringType, FloatType, LongType
+from pyspark.sql.types import StructType, StructField, StringType, TimestampType, DoubleType, LongType
 
 # Create a Spark session
 spark = SparkSession.builder \
-    .appName("KafkaSparkConsumer") \
+    .appName("StockDataConsumer") \
     .getOrCreate()
 
 # Define schema for incoming data
 schema = StructType([
-    StructField("time", StringType(), True),
-    StructField("open", FloatType(), True),
-    StructField("high", FloatType(), True),
-    StructField("low", FloatType(), True),
-    StructField("close", FloatType(), True),
+    StructField("symbol", StringType(), True),
+    StructField("timestamp", StringType(), True),  # Storing timestamp as string to match your format
+    StructField("price", DoubleType(), True),
     StructField("volume", LongType(), True)
 ])
 
@@ -22,7 +20,7 @@ df = spark \
     .readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "localhost:9092") \
-    .option("subscribe", "alpaca-data") \
+    .option("subscribe", "stock-data") \
     .option("startingOffsets", "earliest") \
     .load()
 
