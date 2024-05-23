@@ -2,12 +2,18 @@ import json
 import threading
 import websocket
 from kafka import KafkaProducer
-
 import datetime
-import json
 import requests
 import time
+import os
+from dotenv import load_dotenv
 
+# Load environment variables from a .env file
+load_dotenv()
+
+FINNHUB_API_TOKEN = os.getenv('FINNHUB_API_TOKEN')
+POLYGON_API_KEY = os.getenv('POLYGON_API_KEY')
+                                 
 # Symbols to fetch data for
 symbols = ["AAPL", "AMZN", "BINANCE:BTCUSDT", "IC MARKETS:1"]
 
@@ -17,9 +23,6 @@ producer = KafkaProducer(
     value_serializer=lambda x: json.dumps(x).encode('utf-8')
 )
 
-# Finnhub API token
-FINNHUB_API_TOKEN = 'cp75b0pr01qpb9rai9l0cp75b0pr01qpb9rai9lg'
-POLYGON_API_KEY = 'U5N77pzgUZoL7gHRRqiuOyarJZBGbt0N'
 # Function to handle incoming messages from Finnhub WebSocket
 def on_message(ws, message):
     print('In On message')
