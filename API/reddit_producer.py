@@ -1,20 +1,15 @@
-import praw
-from kafka import KafkaProducer
 import json
-import time
 import threading
+import websocket
+from kafka import KafkaProducer
 
-# Replace these values with your Reddit API credentials
-CLIENT_ID = 'X2BRlhIMxFnT_Ogp083m0w'
-CLIENT_SECRET = '6akm7fO1Y9xK2JXd51I1bCxWG3NmHQ'
-USER_AGENT = 'real-time by aadi'
+import datetime
+import json
+import requests
+import time
 
-# Initialize the Reddit instance
-reddit = praw.Reddit(
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    user_agent=USER_AGENT
-)
+# Symbols to fetch data for
+symbols = ["AAPL", "AMZN", "BINANCE:BTCUSDT", "IC MARKETS:1"]
 
 # Kafka setup
 producer = KafkaProducer(
@@ -22,52 +17,76 @@ producer = KafkaProducer(
     value_serializer=lambda x: json.dumps(x).encode('utf-8')
 )
 
+# Finnhub API token
+FINNHUB_API_TOKEN = 'cp75b0pr01qpb9rai9l0cp75b0pr01qpb9rai9lg'
+POLYGON_API_KEY = 'U5N77pzgUZoL7gHRRqiuOyarJZBGbt0N'
+# Function to handle incoming messages from Finnhub WebSocket
+def on_message(ws, message):
+    print('In On message')
+    data = json.loads(message)
 
-# Function to stream posts from a subreddit
-def stream_posts(subreddit_name):
-    subreddit = reddit.subreddit(subreddit_name)
-    print(f"Streaming new submissions from r/{subreddit_name}...")
-    for submission in subreddit.stream.submissions():
-        print(f"Title: {submission.title}")
-        print(f"Score: {submission.score}")
-        print(f'SubReddit : {subreddit_name}')
-        comments = fetch_top_comments(submission.id, limit = 10)
-        
-        if comments:
-            data = {
-                'Title' : submission.title + submission.selftext,
-                'comments': [ {'Body': comment.body} for comment in comments]
+    # Check if message contains trade data
+    for data in data['data']:
+        if 's' in data and 'p' in data and 'v' in data and 't' in data:
+            record = {
+                'symbol': data['s'],
+                'timestamp': datetime.datetime.fromtimestamp(data['t'] / 1000).strftime('%Y-%m-%d %H:%M:%S'),
+                'price': data['p'],
+                'volume': data['v']
             }
+            print(record, "\n")
+        # producer.send('finnhub-data', value=record)
 
-            producer.send('reddit-data', value=json.dumps(data))
+# Function to handle WebSocket errors
+def on_error(ws, error):
+    print('Error', error)
 
-            print(data)
-        time.sleep(2)
-        print("-" * 40)
+# Function to handle WebSocket closure
+def on_close():
+    print("### closed ###")
 
-# Function to fetch the top 10 comments from a specific post
-def fetch_top_comments(post_id, limit):
-    submission = reddit.submission(id=post_id)
-    submission.comment_sort = 'top'  # Sort comments by top
-    submission.comment_limit = limit
-    submission.comments.replace_more(limit=0)  # Fetch only top-level comments
-    top_comments = submission.comments.list()
+# Function to handle WebSocket connection opening
+def on_open(ws):
+    print("On Open")
+    symbols = ["AAPL", "AMZN", "BINANCE:BTCUSDT", "IC MARKETS:1"]
+    for symbol in symbols:
+        ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
+    print("On Open done")
 
-    return top_comments if len(top_comments) > 5 else None
+# Function to initiate the WebSocket connection and stream data
+def stream_data():
+    # websocket.enableTrace(True)
+    ws = websocket.WebSocketApp(
+        f"wss://ws.finnhub.io?token={FINNHUB_API_TOKEN}",
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+    ws.on_open = on_open
+    ws.run_forever()
 
-# Main function to start streaming and fetching comments
+def fetch_intraday_data(symbol):
+    url = f'https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/minute/2023-05-22/2024-05-22?unadjusted=true&apiKey={POLYGON_API_KEY}'
+    response = requests.get(url)
+    data = response.json()
+
+    if 'error' in data:
+        print(f"Error fetching data for {symbol}: {data['error']}")
+    else:
+        count = 0
+        for result in data['results']:
+            record = {
+                'symbol': symbol,
+                'timestamp': datetime.datetime.fromtimestamp(result['t'] / 1000).strftime('%Y-%m-%d %H:%M:%S'),  # Unix timestamp
+                'price': result['c'],      # Closing price
+                'volume': result['v']      # Volume
+            }
+            count = count + 1
+            print(count)
+            producer.send('stock-data', value=record)
+
+# Main function to start the data streaming
 if __name__ == '__main__':
-    thread1 = threading.Thread(target=stream_posts, args=('soccer',))
-    thread1.start()
-
-    # Create and start the second thread
-    thread2 = threading.Thread(target=stream_posts, args=('PremierLeague',))
-    thread2.start()
-
-    # Create and start the third thread
-    thread3 = threading.Thread(target=stream_posts, args=('football',))
-    thread3.start()
-
-    thread1.join()
-    thread2.join()
-    thread3.join()
+    for symbol in symbols:
+        fetch_intraday_data(symbol)
+    stream_data()

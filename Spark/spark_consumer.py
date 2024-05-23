@@ -1,18 +1,18 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StructField, StringType, ArrayType
+from pyspark.sql.types import StructType, StructField, StringType, TimestampType, DoubleType, LongType
 
 # Create a Spark session
 spark = SparkSession.builder \
-    .appName("RedditDataConsumer") \
+    .appName("StockDataConsumer") \
     .getOrCreate()
 
 # Define schema for incoming data
 schema = StructType([
-    StructField("Title", StringType(), True),
-    StructField("comments", ArrayType(StructType([
-        StructField("Body", StringType(), True)
-    ])), True)
+    StructField("symbol", StringType(), True),
+    StructField("timestamp", StringType(), True),  # Storing timestamp as string to match your format
+    StructField("price", DoubleType(), True),
+    StructField("volume", LongType(), True)
 ])
 
 # Read data from Kafka
@@ -20,7 +20,7 @@ df = spark \
     .readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "localhost:9092") \
-    .option("subscribe", "reddit-data") \
+    .option("subscribe", "stock-data") \
     .option("startingOffsets", "earliest") \
     .load()
 
