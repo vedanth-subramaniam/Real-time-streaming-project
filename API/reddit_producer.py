@@ -23,22 +23,31 @@ producer = KafkaProducer(
     value_serializer=lambda x: json.dumps(x).encode('utf-8')
 )
 
+last_sent_timestamp = {}
+
 # Function to handle incoming messages from Finnhub WebSocket
 def on_message(ws, message):
+    global last_sent_timestamp
     print('In On message')
     data = json.loads(message)
 
     # Check if message contains trade data
     for data in data['data']:
         if 's' in data and 'p' in data and 'v' in data and 't' in data:
-            record = {
-                'symbol': data['s'],
-                'timestamp': datetime.datetime.fromtimestamp(data['t'] / 1000).strftime('%Y-%m-%d %H:%M:%S'),
-                'price': data['p'],
-                'volume': data['v']
-            }
-            print(record, "\n")
-            producer.send('stock-data', value=record)
+            symbol = data['s']
+            timestamp = datetime.datetime.fromtimestamp(data['t'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
+            
+            if symbol not in last_sent_timestamp or (timestamp - last_sent_timestamp[symbol]) >= 60:
+                last_sent_timestamp[symbol] = timestamp 
+
+                record = {
+                    'symbol': symbol,
+                    'timestamp': timestamp,
+                    'price': data['p'],
+                    'volume': data['v']
+                }
+                print(record, "\n")
+                producer.send('stock-data', value=record)
 
 # Function to handle WebSocket errors
 def on_error(ws, error):

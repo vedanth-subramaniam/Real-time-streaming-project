@@ -11,7 +11,7 @@ spark = SparkSession.builder \
 # Define schema for incoming data
 schema = StructType([
     StructField("symbol", StringType(), True),
-    StructField("timestamp", StringType(), True),  # Storing timestamp as string to match your format
+    StructField("timestamp", StringType(), True),
     StructField("price", DoubleType(), True),
     StructField("volume", LongType(), True)
 ])
