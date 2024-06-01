@@ -27,28 +27,53 @@ last_sent_timestamp = {}
 
 # Function to handle incoming messages from Finnhub WebSocket
 def on_message(ws, message):
-    global last_sent_timestamp
-    print('In On message')
+    global accumulated_data
     data = json.loads(message)
 
     # Check if message contains trade data
-    for data in data['data']:
-        if 's' in data and 'p' in data and 'v' in data and 't' in data:
-            symbol = data['s']
-            timestamp = datetime.datetime.fromtimestamp(data['t'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
-            
-            if symbol not in last_sent_timestamp or (timestamp - last_sent_timestamp[symbol]) >= 60:
-                last_sent_timestamp[symbol] = timestamp 
+    for trade in data.get('data', []):
+        if 's' in trade and 'p' in trade and 'v' in trade and 't' in trade:
+            symbol = trade['s']
+            timestamp = trade['t'] / 1000  # Convert milliseconds to seconds
+            price = trade['p']
+            volume = trade['v']
 
-                record = {
-                    'symbol': symbol,
-                    'timestamp': timestamp,
-                    'price': data['p'],
-                    'volume': data['v']
+            if symbol not in accumulated_data:
+                accumulated_data[symbol] = {
+                    'last_sent_timestamp': timestamp,
+                    'price_sum': price,
+                    'volume_sum': volume,
+                    'count': 1
                 }
-                print(record, "\n")
-                producer.send('stock-data', value=record)
+            else:
+                # Accumulate data
+                accumulated_data[symbol]['price_sum'] += price
+                accumulated_data[symbol]['volume_sum'] += volume
+                accumulated_data[symbol]['count'] += 1
 
+                # Check if a minute has passed since the last sent timestamp
+                if (timestamp - accumulated_data[symbol]['last_sent_timestamp']) >= 60:
+                    avg_price = accumulated_data[symbol]['price_sum'] / accumulated_data[symbol]['count']
+                    total_volume = accumulated_data[symbol]['volume_sum']
+
+                    record = {
+                        'symbol': symbol,
+                        'timestamp': datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+                        'price': avg_price,
+                        'volume': total_volume
+                    }
+
+                    print(record, "\n")
+                    producer.send('stock-data', value=record)
+
+                    # Reset accumulated data
+                    accumulated_data[symbol] = {
+                        'last_sent_timestamp': timestamp,
+                        'price_sum': 0,
+                        'volume_sum': 0,
+                        'count': 0
+                    }
+                    
 # Function to handle WebSocket errors
 def on_error(ws, error):
     print('Error', error)
